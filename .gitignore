@@ -1,0 +1,22 @@
+# 모노레포 공통 항목. 앱별 빌드 산출물은 각 앱 디렉터리의 .gitignore에서 관리한다.
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### VS Code ###
+.vscode/
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Secrets ###
+.env
+.env.*
+!.env.example
+!**/.env.example
+!.env.prod.example
+!**/.env.prod.example
