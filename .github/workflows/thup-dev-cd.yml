@@ -1,0 +1,92 @@
+name: Dev CD
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - "apps/server/**"
+      - ".github/workflows/thup-dev-cd.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/server
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Build JAR
+        run: ./gradlew bootJar -x test --no-daemon
+
+      - name: Copy deploy files to GSM SV VM
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ssh.gsmsv.site
+          port: ${{ secrets.GSMSV_SSH_PORT }}
+          username: ubuntu
+          key: ${{ secrets.GSMSV_SSH_PRIVATE_KEY }}
+          source: "apps/server/build/libs/thup-*.jar,apps/server/docker/Dockerfile,apps/server/deploy/compose.yml,apps/server/deploy/Caddyfile"
+          target: "/home/ubuntu/thup/"
+          # 모노레포 경로(apps/server/)를 떼어내 VM에는 기존과 같은 구조(build/, docker/, deploy/)로 올린다
+          strip_components: 2
+
+      - name: Deploy on GSM SV VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ssh.gsmsv.site
+          port: ${{ secrets.GSMSV_SSH_PORT }}
+          username: ubuntu
+          key: ${{ secrets.GSMSV_SSH_PRIVATE_KEY }}
+          envs: MYSQL_PASSWORD,REDIS_PASSWORD,DATAGSM_CLIENT_ID,DATAGSM_CLIENT_SECRET,DATAGSM_REDIRECT_URI,RESEND_API_KEY,MAIL_FROM_ADDRESS,DISCORD_JOB_WEBHOOK_URL,DISCORD_ERROR_WEBHOOK_URL
+          script: |
+            set -e
+            cd /home/ubuntu/thup/deploy
+
+            cat > .env << ENVEOF
+            MYSQL_PASSWORD=$MYSQL_PASSWORD
+            REDIS_PASSWORD=$REDIS_PASSWORD
+            DATAGSM_CLIENT_ID=$DATAGSM_CLIENT_ID
+            DATAGSM_CLIENT_SECRET=$DATAGSM_CLIENT_SECRET
+            DATAGSM_REDIRECT_URI=$DATAGSM_REDIRECT_URI
+            RESEND_API_KEY=$RESEND_API_KEY
+            MAIL_FROM_ADDRESS=$MAIL_FROM_ADDRESS
+            DISCORD_JOB_WEBHOOK_URL=$DISCORD_JOB_WEBHOOK_URL
+            DISCORD_ERROR_WEBHOOK_URL=$DISCORD_ERROR_WEBHOOK_URL
+            ENVEOF
+
+            docker compose --env-file .env up -d --build
+
+            # Caddyfile을 scp로 새로 올리면 파일이 임시명으로 업로드된 뒤 rename되어 inode가
+            # 바뀐다. caddy 컨테이너의 파일 바인드 마운트는 컨테이너 시작 시점의 inode에 고정되므로,
+            # compose up만으로는(서비스 정의 자체는 안 바뀌어 재생성되지 않음) 새 내용이 반영되지
+            # 않고, `caddy reload`조차 컨테이너가 보는 옛 마운트를 다시 읽을 뿐이라 효과가 없다.
+            # 마운트를 새로 맺으려면 컨테이너를 실제로 재시작해야 한다.
+            docker compose restart caddy
+
+            docker image prune -f
+        env:
+          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          DATAGSM_CLIENT_ID: ${{ secrets.DATAGSM_CLIENT_ID }}
+          DATAGSM_CLIENT_SECRET: ${{ secrets.DATAGSM_CLIENT_SECRET }}
+          DATAGSM_REDIRECT_URI: ${{ secrets.DATAGSM_REDIRECT_URI }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MAIL_FROM_ADDRESS: ${{ secrets.MAIL_FROM_ADDRESS }}
+          DISCORD_JOB_WEBHOOK_URL: ${{ secrets.DISCORD_JOB_WEBHOOK_URL }}
+          DISCORD_ERROR_WEBHOOK_URL: ${{ secrets.DISCORD_ERROR_WEBHOOK_URL }}
