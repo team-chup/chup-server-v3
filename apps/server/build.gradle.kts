@@ -1,0 +1,95 @@
+plugins {
+    kotlin("jvm") version "2.3.21"
+    kotlin("plugin.spring") version "2.3.21"
+    kotlin("plugin.jpa") version "2.3.21"
+    id("org.springframework.boot") version "4.1.0"
+    id("io.spring.dependency-management") version "1.1.7"
+    id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
+}
+
+group = "team.themoment"
+version = "0.0.1-SNAPSHOT"
+description = "thup"
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url = uri("https://jitpack.io") }
+}
+
+val kotestVersion = "6.1.4"
+val mockkVersion = "1.14.9"
+
+dependencies {
+    // Spring Boot Starters
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.springframework.session:spring-session-data-redis")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+
+    // Kotlin
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("tools.jackson.module:jackson-module-kotlin")
+
+    // Docker Compose Support
+    developmentOnly("org.springframework.boot:spring-boot-docker-compose")
+
+    // Database
+    runtimeOnly("com.mysql:mysql-connector-j")
+
+    // Testing
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.security:spring-security-test")
+    testImplementation("io.kotest:kotest-runner-junit5:$kotestVersion")
+    testImplementation("io.kotest:kotest-assertions-core:$kotestVersion")
+    testImplementation("io.kotest:kotest-extensions-spring:$kotestVersion")
+    testImplementation("io.mockk:mockk:$mockkVersion")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    // Feign
+    implementation("io.github.openfeign:feign-core:13.5")
+    implementation("io.github.openfeign:feign-jackson:13.5")
+
+    // sdk
+    implementation("com.github.themoment-team:the-sdk:1.5")
+
+    // DataGSM OAuth SDK
+    implementation("com.github.themoment-team:datagsm-oauth-sdk-java:1.5.0")
+
+    // Resend (이메일 발송)
+    implementation("com.resend:resend-java:4.13.0")
+}
+
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")
+    }
+}
+
+allOpen {
+    annotation("jakarta.persistence.Entity")
+    annotation("jakarta.persistence.MappedSuperclass")
+    annotation("jakarta.persistence.Embeddable")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    // 빌드 환경(OS/로케일)의 기본 인코딩에 의존하면 소스 코드 속 한글 문자열 리터럴이
+    // 컴파일 시점에 깨질 수 있어 명시적으로 UTF-8을 강제한다
+    options.encoding = "UTF-8"
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
+}
+
+tasks.named<Jar>("jar") {
+    enabled = false
+}
